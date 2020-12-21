@@ -1,3 +1,6 @@
+#ifndef BLOCKS_H
+#define BLOCKS_H
+
 #define BATT_NOW "/sys/class/power_supply/BAT0/charge_now"
 #define BATT_FULL (3631000 / 100)
 #define BATT_STATUS "/sys/class/power_supply/BAT0/status"
@@ -8,7 +11,25 @@
 #define MPD_HOST_ADDR "127.0.0.1"
 #define MPD_HOST_PORT "0"
 #define MPD_HOST_CON_TIMEOUT 3000
+#define BATTERY_WARN_LEVEL 10
 #define PADDING 4
+#define CMDLENGTH 128
+
+typedef struct Block Block;
+typedef int(*BlockFunc)(char *output);
+
+struct Block {
+    BlockFunc func;
+	unsigned interval;
+	unsigned signal;
+};
+
+/* functions that can be called by a block */ 
+int blockEventGetTime(char *output);
+int blockEventGetBattery(char *output);
+int blockEventGetCpuTemp(char *output);
+int blockEventMpd(char *output);
+int blockEventVol(char *output);
 
 static const char delim = '|';
 
@@ -44,3 +65,4 @@ static const Block blocks[] = {
         .signal = 0
     }, 
 };
+#endif

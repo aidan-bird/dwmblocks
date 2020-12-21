@@ -1,10 +1,12 @@
 PREFIX ?= /usr/local
 
+libs=`pkg-config --cflags x11` `pkg-config --libs x11` `pkg-config --cflags --libs libnotify`
+
 debug: dwmblocks.c blocks.h
-	cc `pkg-config --cflags x11` `pkg-config --libs x11` -ggdb3 -Og dwmblocks.c -o debug 
+	cc $(libs) -ggdb3 -Og dwmblocks.c -o debug 
 
 output: dwmblocks.c blocks.h
-	cc `pkg-config --cflags x11` `pkg-config --libs x11` -O2 -march=native dwmblocks.c -o dwmblocks 
+	cc $(libs) -O2 -march=native dwmblocks.c -o dwmblocks 
 clean:
 	rm -f *.o *.gch dwmblocks debug
 install: output
