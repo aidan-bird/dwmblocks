@@ -1,17 +1,21 @@
 #ifndef BLOCKS_H
 #define BLOCKS_H
 
-#define BATT_NOW "/sys/class/power_supply/BAT0/charge_now"
-#define BATT_FULL (3631000 / 100)
+#define BATT_WARN_TIMEOUT 1000 * 5
+#define BATT_NOW "/sys/class/power_supply/BAT0/capacity"
+#define BATT_WARN_LEVEL 10
 #define BATT_STATUS "/sys/class/power_supply/BAT0/status"
 #define BATT_STATUS_CHARGING 'C'
 #define BATT_STATUS_DISCHARGING 'D'
 #define BATT_STATUS_FULL 'F'
-#define CPU_TEMP "/sys/class/hwmon/hwmon0/device/temp"
+#define BATT_STATUS_UNKNOWN 'U'
+
+#define CPU_TEMP "/sys/class/thermal/thermal_zone0/temp"
+
 #define MPD_HOST_ADDR "127.0.0.1"
 #define MPD_HOST_PORT "0"
 #define MPD_HOST_CON_TIMEOUT 3000
-#define BATTERY_WARN_LEVEL 10
+
 #define PADDING 4
 #define CMDLENGTH 128
 

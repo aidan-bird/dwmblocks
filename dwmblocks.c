@@ -102,42 +102,47 @@ blockEventGetBattery(char *output)
     int batteryStat;
     int ret;
     const char MSG_BATTERY_FULL[] = "BATT 100";
-    /* the escaped characters represent a battery emoji*/  
+    /* the escaped characters represent a battery emoji */  
     const char *lowBatteryNotificationText = "\xf0\x9f\x94\x8b Battery low!"; 
-    const int lowBatteryNotificationTimeout = 1000 * 5;
 
     if (!(fpStatus = fopen(BATT_STATUS, "r")))
         goto error1;
-    if (!(fpCharge = fopen(BATT_NOW, "r")))
+    if ((batteryStat = getc(fpStatus)) == EOF)
         goto error2;
-    batteryStat = getc(fpStatus);
+    fclose(fpStatus);
     if (batteryStat == BATT_STATUS_FULL) {
         memcpy(output, MSG_BATTERY_FULL, sizeof(MSG_BATTERY_FULL) - 1);
         return sizeof(MSG_BATTERY_FULL) - 1;
     }
-    if (fscanf(fpCharge, "%d", &currentCharge) != 1)
+    if (!(fpCharge = fopen(BATT_NOW, "r")))
         goto error3;
+    if (fscanf(fpCharge, "%d", &currentCharge) != 1)
+        goto error4;
+    fclose(fpCharge);
     switch (batteryStat) {
         case BATT_STATUS_DISCHARGING:
-            if ((currentCharge / BATT_FULL) < BATTERY_WARN_LEVEL) {
+            if (currentCharge < BATT_WARN_LEVEL) {
                 if (!isLowBatteryWarnSent) {
                     isLowBatteryWarnSent = 1;
                     sendUrgentNotification(lowBatteryNotificationText,
-                        lowBatteryNotificationTimeout);
+                        BATT_WARN_TIMEOUT);
                 }
             }
-            ret = sprintf(output, "BATT %d", currentCharge /= BATT_FULL);
+            ret = sprintf(output, "BATT %d", currentCharge);
             break;
         case BATT_STATUS_CHARGING:
             isLowBatteryWarnSent = 0;
-            ret = sprintf(output, "BATT+ %d", currentCharge /= BATT_FULL);
+            ret = sprintf(output, "BATT %d+", currentCharge);
+            break;
+        case BATT_STATUS_UNKNOWN:
+            ret = sprintf(output, "BATT %d?", currentCharge);
             break;
     }
-    fclose(fpCharge);
-    fclose(fpStatus);
     return ret;
-error3:;
+error4:;
     fclose(fpCharge);
+error3:;
+    return 0;
 error2:;
     fclose(fpStatus);
 error1:;
