@@ -16,8 +16,7 @@
 #define MPD_HOST_PORT "0"
 #define MPD_HOST_CON_TIMEOUT 3000
 
-#define PADDING 4
-#define CMDLENGTH 128
+#define CMDLENGTH 127
 
 typedef struct Block Block;
 typedef int(*BlockFunc)(char *output);
@@ -35,7 +34,8 @@ int blockEventGetCpuTemp(char *output);
 int blockEventMpd(char *output);
 int blockEventVol(char *output);
 
-static const char delim = '|';
+static const char delim[] = "    |    ";
+
 
 static const Block blocks[] = {
     { 

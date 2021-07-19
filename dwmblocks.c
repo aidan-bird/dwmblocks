@@ -8,51 +8,61 @@
 #include <libnotify/notify.h>
 
 #include "./blocks.h"
-
-#define LENGTH(X) (sizeof(X) / sizeof (X[0]))
-#define BLOCKLENGTH CMDLENGTH - PADDING * 2 + 1
-#define NOTIFY_APP_NAME "dwmblocks_notifier"
-
-void sighandler(int num);
-void getcmds();
-void getcmd(const Block *restrict block, char *restrict output, int isPadded);
-int getstatus(char *str, char *last);
-void setroot();
-void statusloop();
-void termhandler(int signum);
-void cleanup();
-int sendUrgentNotification(const char *text, int timeout);
+#include "./dwmblocks.h"
 
 static Display *dpy;
 static int screen;
 static Window root;
 static unsigned deltas[LENGTH(blocks)];
-static char statusbar[LENGTH(blocks)][CMDLENGTH] = {0};
-static char statusstr[2][LENGTH(blocks) * CMDLENGTH];
+static char statusbar[LENGTH(blocks)][CMDSIZE] = {0};
+static char statusstr[2][LENGTH(blocks) * CMDSIZE];
 static int statusContinue = 1;
 static void (*writestatus) () = setroot;
-
 static unsigned sigBlocks[LENGTH(blocks)];
 static unsigned intervalBlocks[LENGTH(blocks)];
 static int sigBlocksLen;
 static int intervalBlocksLen;
 static int isLowBatteryWarnSent;
+static AppendDelimFunc delimFunc = appendDelimStr;
 
+/*
+ * REQUIRES
+ * output is a buffer that can store (BLOCKLENGTH + 1) or more characters
+ *
+ * MODIFIES
+ * output 
+ *
+ * EFFECTS
+ * execute the command given by cmd and write the output to output.
+ * returns the number of characters written excluding the null terminator.
+ */
 int
 execCmd(const char *restrict cmd, char *restrict output)
 {
     int len;
     FILE *cmdf;
 
-    if (!(cmdf = popen(cmd, "r")) || !fgets(output, BLOCKLENGTH, cmdf))
+    if (!(cmdf = popen(cmd, "r")) || !fgets(output, BLOCKLENGTH + 1, cmdf))
         return 0;
 	pclose(cmdf);
     len = strlen(output);
     if (output[len - 1] == '\n')
-        return len - 1;
+        len--;
+    output[len] = '\0';
     return len;
 }
 
+/*
+ * REQUIRES
+ * output is a buffer that can store (BLOCKLENGTH + 1) or more characters
+ *
+ * MODIFIES
+ * none
+ *
+ * EFFECTS
+ * emits a desktop notification that displays text and exits after timeout.
+ * returns non-zero on error.
+ */
 int
 sendUrgentNotification(const char *text, int timeout)
 {
@@ -67,20 +77,55 @@ sendUrgentNotification(const char *text, int timeout)
     return 0;
 }
 
+/*
+ * REQUIRES
+ * i3mpd.sh
+ * output is a buffer that can store (BLOCKLENGTH + 1) or more characters
+ *
+ * MODIFIES
+ * output
+ *
+ * EFFECTS
+ * writes the name of the currently playing song to output.
+ * returns the number of characters written to output.
+ */
 int
 blockEventMpd(char *output)
 {
     /* TODO: replace script with c function */ 
-    return execCmd("~/.scripts/i3mpd.sh", output);
+    return execCmd("i3mpd.sh", output);
 }
 
+/*
+ * REQUIRES
+ * i3vol.sh
+ * output is a buffer that can store (BLOCKLENGTH + 1) or more characters
+ *
+ * MODIFIES
+ * output
+ *
+ * EFFECTS
+ * writes the current sound volume to output.
+ * returns the number of characters written to output.
+ */
 int
 blockEventVol(char *output)
 {
     /* TODO: replace script with c function */ 
-    return execCmd("~/.scripts/i3vol.sh", output);
+    return execCmd("i3vol.sh", output);
 }
 
+/*
+ * REQUIRES
+ * output is a buffer that can store (BLOCKLENGTH + 1) or more characters
+ *
+ * MODIFIES
+ * output
+ *
+ * EFFECTS
+ * writes the current date and time to output.
+ * returns the number of characters written to output.
+ */
 int
 blockEventGetTime(char *output)
 {
@@ -90,9 +135,20 @@ blockEventGetTime(char *output)
     epoch = time(NULL);
     if (epoch == (time_t)(-1) || !(t = localtime(&epoch)))
         return 0;
-    return strftime(output, BLOCKLENGTH, "%e %h %Y %H:%M", t);
+    return strftime(output, BLOCKLENGTH + 1, "%e %h %Y %H:%M", t);
 }
 
+/*
+ * REQUIRES 
+ * output is a buffer that can store (BLOCKLENGTH + 1) or more characters
+ *
+ * MODIFIES
+ * output
+ *
+ * EFFECTS
+ * writes the current battery percentage and status to output
+ * returns the number of characters written to output.
+ */
 int
 blockEventGetBattery(char *output)
 {
@@ -101,9 +157,8 @@ blockEventGetBattery(char *output)
     int currentCharge;
     int batteryStat;
     int ret;
-    const char MSG_BATTERY_FULL[] = "BATT 100";
-    /* the escaped characters represent a battery emoji */  
-    const char *lowBatteryNotificationText = "\xf0\x9f\x94\x8b Battery low!"; 
+    static const char *msgBatteryFull = "BATT 100";
+    static const char *lowBatteryNotificationText = "🔋 Battery low!"; 
 
     if (!(fpStatus = fopen(BATT_STATUS, "r")))
         goto error1;
@@ -111,8 +166,7 @@ blockEventGetBattery(char *output)
         goto error2;
     fclose(fpStatus);
     if (batteryStat == BATT_STATUS_FULL) {
-        memcpy(output, MSG_BATTERY_FULL, sizeof(MSG_BATTERY_FULL) - 1);
-        return sizeof(MSG_BATTERY_FULL) - 1;
+        return sprintf(output, "%s", msgBatteryFull);
     }
     if (!(fpCharge = fopen(BATT_NOW, "r")))
         goto error3;
@@ -149,6 +203,24 @@ error1:;
     return 0;
 }
 
+void
+debugtest(char *output)
+{
+    memset(output, 'a', BLOCKLENGTH);
+    output[BLOCKLENGTH] = '\0';
+}
+
+/*
+ * REQUIRES 
+ * output is a buffer that can store (BLOCKLENGTH + 1) or more characters
+ *
+ * MODIFIES
+ * output
+ *
+ * EFFECTS
+ * writes the current cpu temperature.
+ * returns the number of characters written to output.
+ */
 int
 blockEventGetCpuTemp(char *output)
 {
@@ -170,6 +242,14 @@ error1:;
     return 0;
 }
 
+/*
+ * REQUIRES 
+ *
+ * MODIFIES
+ *
+ * EFFECTS
+ *
+ */
 void
 sighandler(int num)
 {
@@ -184,52 +264,103 @@ sighandler(int num)
 }
 
 void
+appendDelimStr(char *output)
+{
+    memcpy(output, delim, sizeof(delim));
+    output[sizeof(delim)] = '\0';
+}
+
+void
+appendSimpleDelim(char *output)
+{}
+
+void
+appendFastDelim(char *output)
+{}
+
+/*
+ * REQUIRES 
+ * output is a buffer that can store whatever is required by the function 
+ * in block + the separator string.
+ *
+ * MODIFIES
+ * output
+ *
+ * EFFECTS
+ * calls the function in block and writes its output to output, then a 
+ * separator string is appended to the output.
+ * setting isPadded to zero will not append the separator string.
+ * no separator string will be appended if the block function writes zero 
+ * characters.
+ */
+void
 getcmd(const Block *restrict block, char *restrict output, int isPadded)
 {
     int i;
 
     i = block->func(output);
-    if (isPadded && i) {
-        memset(output + i, ' ', PADDING * 2 + 1);
-        output[i + PADDING] = delim;
-        i += PADDING * 2 + 1;
-    }
-	output[i] = '\0';
+    if (isPadded && i)
+        delimFunc(output + i);
 }
 
+/*
+ * REQUIRES 
+ * none
+ *
+ * MODIFIES
+ * deltas, statusbar
+ *
+ * EFFECTS
+ * updates all interval blocks
+ */
 void
 getcmds()
 {
-    for (int i = 0; i < intervalBlocksLen - 1; i++) {
+    for (int i = 0; i < intervalBlocksLen; i++) {
         if (deltas[intervalBlocks[i]]) {
             deltas[intervalBlocks[i]]--;
         } else {
             deltas[intervalBlocks[i]] = (blocks + intervalBlocks[i])->interval;
-            getcmd(blocks + intervalBlocks[i], statusbar[intervalBlocks[i]], 1);
+            /* no padding for last block */
+            getcmd(blocks + intervalBlocks[i], statusbar[intervalBlocks[i]], 
+                intervalBlocksLen - (i + 1));
         }
-    }
-    /* no padding for the last block */ 
-    if (deltas[intervalBlocks[intervalBlocksLen - 1]]) {
-        deltas[intervalBlocks[intervalBlocksLen - 1]]--;
-    } else {
-        deltas[intervalBlocks[intervalBlocksLen - 1]] = (blocks + 
-            intervalBlocks[intervalBlocksLen - 1])->interval;
-        getcmd(blocks + intervalBlocks[intervalBlocksLen - 1],
-            statusbar[intervalBlocks[intervalBlocksLen - 1]], 0);
     }
 }
 
+/*
+ * REQUIRES 
+ * none
+ *
+ * MODIFIES
+ * statusbar
+ *
+ * EFFECTS
+ * executes all block functions
+ */
 void
 getAllCmds()
 {
-    for (int i = 0; i < LENGTH(blocks) - 1; i++)
-        getcmd(blocks + i, statusbar[i], 1);
-    /* no padding for the last block */ 
-    getcmd(blocks + LENGTH(blocks) - 1, statusbar[intervalBlocksLen - 1], 0);
+    /* no padding for last block */ 
+    for (int i = 0; i < LENGTH(blocks); i++)
+        getcmd(blocks + i, statusbar[i], LENGTH(blocks) - (i + 1));
 }
 
+/*
+ * REQUIRES 
+ * str and last are both buffer.
+ * last can store at least what str can store.
+ * str and last can store at least CMDSIZE characters
+ *
+ * MODIFIES
+ * str, last
+ *
+ * EFFECTS
+ * last is used to store str before it is used to store the next statusbar string.
+ * the next statusbar string does not differ from the last, then non-zero is returned.
+ */
 int
-getstatus(char *str, char *last)
+getstatus(char *restrict str, char *restrict last)
 {
 	strcpy(last, str);
 	str[0] = '\0';
@@ -239,6 +370,17 @@ getstatus(char *str, char *last)
 	return strcmp(str, last);
 }
 
+/*
+ * REQUIRES 
+ * none
+ *
+ * MODIFIES
+ * statusstr, statusbar
+ *
+ * EFFECTS
+ * updates the status bar.
+ * will terminate the program on error.
+ */
 void
 setroot()
 {
@@ -257,6 +399,16 @@ setroot()
 	XCloseDisplay(dpy);
 }
 
+/*
+ * REQUIRES 
+ * none
+ *
+ * MODIFIES
+ * none
+ *
+ * EFFECTS
+ * continuously updates the status bar
+ */
 void
 statusloop()
 {
@@ -268,6 +420,17 @@ statusloop()
 	}
 }
 
+/*
+ * REQUIRES 
+ * none
+ *
+ * MODIFIES
+ * none
+ *
+ * EFFECTS
+ * called when the program receives SIGTERM or SIGINT.
+ * cleans up and terminates the program.
+ */
 void
 termhandler(int signum)
 {
@@ -276,6 +439,16 @@ termhandler(int signum)
 	exit(0);
 }
 
+/*
+ * REQUIRES 
+ * none
+ *
+ * MODIFIES
+ * none
+ *
+ * EFFECTS
+ * cleans up the program before exiting.
+ */
 void
 cleanup()
 {
@@ -289,10 +462,11 @@ int
 main(int argc, char **argv)
 {
     int j;
-    
-    j = 0;
+   
+    /* set up the blocks */ 
     if (notify_init(NOTIFY_APP_NAME) == FALSE)
         goto error1;
+    j = 0;
     for (int i = 0; i < LENGTH(blocks); i++)
         if (blocks[i].interval)
             intervalBlocks[j++] = i;
