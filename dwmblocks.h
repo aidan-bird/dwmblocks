@@ -1,9 +1,10 @@
 #ifndef DWMBLOCKS_H
 #define DWMBLOCKS_H
 
+#include "./blocks.h"
+
 #define LENGTH(X) (sizeof(X) / sizeof (X[0]))
-#define BLOCKLENGTH (CMDLENGTH - (sizeof(delim) - 1))
-#define CMDSIZE (CMDLENGTH + 1)
+#define CMDSIZE ((BLOCKLENGTH) + (sizeof(delim) - 1) + 1)
 #define NOTIFY_APP_NAME "dwmblocks_notifier"
 
 typedef void (*AppendDelimFunc)(char*);

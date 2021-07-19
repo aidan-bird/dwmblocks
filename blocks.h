@@ -16,7 +16,7 @@
 #define MPD_HOST_PORT "0"
 #define MPD_HOST_CON_TIMEOUT 3000
 
-#define CMDLENGTH 127
+#define BLOCKLENGTH 127
 
 typedef struct Block Block;
 typedef int(*BlockFunc)(char *output);

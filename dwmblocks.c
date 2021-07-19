@@ -267,7 +267,7 @@ void
 appendDelimStr(char *output)
 {
     memcpy(output, delim, sizeof(delim));
-    output[sizeof(delim)] = '\0';
+    output[sizeof(delim) - 1] = '\0';
 }
 
 void
